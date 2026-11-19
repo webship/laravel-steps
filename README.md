@@ -42,19 +42,19 @@ SITE_DIR="$PWD/laravel-app" laravel-steps/.github/scripts/build-ddev-site.sh
 
 The app answers at `https://laravelsteps.ddev.site` and its mailbox at `https://laravelsteps.ddev.site:8026`.
 
-In the [Webship Workspace](https://github.com/webship/workspace), its Laravel plugin builds the app instead, with the same official installer and starter kit, in a sites folder of the workspace (`test/` here; `dev/`, `sandboxes/` and `demos/` work the same):
+In the [Webship Workspace](https://github.com/webship/workspace), its Laravel plugin builds the app instead, with the same official installer and starter kit, in a sites folder of the workspace (`dev/` here, which the plugin's needs add to a new workspace; `test/`, `sandboxes/` and `demos/` work the same once added):
 
 ```bash
 bash core/scripts/plugins.sh --require laravel --with-needs
 bash core/scripts/plugins.sh --activate laravel --with-needs
 bash core/scripts/plugins.sh --install laravel
-bash test/cmd-laravel-project.sh mysite --install --add-users --production
+bash dev/cmd-laravel-project.sh mysite --install --add-users --production
 ```
 
 That app answers at `https://mysite.ddev.site` and its mailbox at `https://mysite.ddev.site:8026`. `--production` runs it as the script's app runs (the error pages, never the debug page, and the password rules of a live app); `--starter-kit react` or `--starter-kit vue` picks another kit. Its accounts are the plugin's: `member` (address verified) and `unverified`, each named as its handle, with the workspace's shared password `dD.123123ddd` (step 3 names them). It has none of the one page the script adds for the 500 page, which one scenario of [`tests/features/error-pages.feature`](tests/features/error-pages.feature) and the `@debug-page` lane open; this adds it, from the workspace folder:
 
 ```bash
-cat >> test/mysite/routes/web.php <<'PHPEOF'
+cat >> dev/mysite/routes/web.php <<'PHPEOF'
 
 // Added by the test app of the webship-js suite: an error nothing catches.
 Route::get('test-fixtures/server-error', function () {
