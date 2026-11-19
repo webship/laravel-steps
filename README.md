@@ -42,6 +42,27 @@ SITE_DIR="$PWD/laravel-app" laravel-steps/.github/scripts/build-ddev-site.sh
 
 The app answers at `https://laravelsteps.ddev.site` and its mailbox at `https://laravelsteps.ddev.site:8026`.
 
+In the [Webship Workspace](https://github.com/webship/workspace), its Laravel plugin builds the app instead, with the same official installer and starter kit, in a sites folder of the workspace (`test/` here; `dev/`, `sandboxes/` and `demos/` work the same):
+
+```bash
+bash core/scripts/plugins.sh --require laravel --with-needs
+bash core/scripts/plugins.sh --activate laravel --with-needs
+bash core/scripts/plugins.sh --install laravel
+bash test/cmd-laravel-project.sh mysite --install --add-users --production
+```
+
+That app answers at `https://mysite.ddev.site` and its mailbox at `https://mysite.ddev.site:8026`. `--production` runs it as the script's app runs (the error pages, never the debug page, and the password rules of a live app); `--starter-kit react` or `--starter-kit vue` picks another kit. Its accounts are the plugin's: `member` (address verified) and `unverified`, each named as its handle, with the workspace's shared password `dD.123123ddd` (step 3 names them). It has none of the one page the script adds for the 500 page, which one scenario of [`tests/features/error-pages.feature`](tests/features/error-pages.feature) and the `@debug-page` lane open; this adds it, from the workspace folder:
+
+```bash
+cat >> test/mysite/routes/web.php <<'PHPEOF'
+
+// Added by the test app of the webship-js suite: an error nothing catches.
+Route::get('test-fixtures/server-error', function () {
+    throw new RuntimeException('The test app raised this error on purpose.');
+});
+PHPEOF
+```
+
 **2. A test project.**
 
 ```bash
@@ -89,6 +110,8 @@ module.exports = {
 };
 ```
 
+On an app from the Webship Workspace (step 1), the accounts are the plugin's: `member: { email: 'member@example.com', password: 'dD.123123ddd', name: 'member' }` and `unverified: { email: 'unverified@example.com', password: 'dD.123123ddd', name: 'unverified' }`, and `mailUrl` follows `LAUNCH_URL`. Its address goes in `LAUNCH_URL` (step 5).
+
 **4. A first feature**, `tests/features/first-run.feature`:
 
 ```gherkin
@@ -106,7 +129,7 @@ Feature: First run
     And the page should not show debug information
 ```
 
-**5. Run it.** Set `LAUNCH_URL` to the address of the app (the build script's app answers at the default; `LAUNCH_URL=https://laravelsteps.ddev.site npm test` says it out loud), then:
+**5. Run it.** Set `LAUNCH_URL` to the address of the app: `https://laravelsteps.ddev.site` for the build script's app, `https://mysite.ddev.site` for the Workspace's.
 
 ```bash
 LAUNCH_URL=https://laravelsteps.ddev.site npm test
