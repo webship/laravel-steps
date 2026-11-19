@@ -28,6 +28,11 @@ const {
 
 const PARTS = { name: 'name', email: 'email', 'email address': 'email', password: 'password' };
 
+/** A text that ends a sentence: with its own full stop, or with one added. */
+function endSentence(text) {
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
 /** A part of an account of the registry: its name, its address or its password. */
 function accountPart(world, part, handle) {
   const user = resolveUser(world, handle);
@@ -226,7 +231,7 @@ Then(/^(I |we )*should see the (?:(success|error|warning|info) )?notification "(
   await recordNotifications(this);
   const wanted = type ? type.toLowerCase() : null;
   await eventually(this, () => shownNotifications(this), (list) => list.some((item) => (!wanted || item.type === wanted) && item.text.includes(text)), (list) => ({
-    message: `Expected the ${wanted ? wanted + ' ' : ''}notification "${text}". The page showed: ${list.length ? list.map((item) => `[${item.type || 'plain'}] ${item.text}`).join('; ') : 'no notification'}.`,
+    message: `Expected the ${wanted ? wanted + ' ' : ''}notification "${text}". The page showed: ${list.length ? endSentence(list.map((item) => `[${item.type || 'plain'}] ${item.text}`).join('; ')) : 'no notification.'}`,
     hint: 'Notifications are the messages at the corner of the page after a save. Assert one right after the action that raises it; a refused form shows errors under its fields instead.',
   }));
 });
@@ -247,7 +252,7 @@ Then(/^(I |we )*should not see an? (?:(success|error|warning|info) )?notificatio
   const wanted = type ? type.toLowerCase() : null;
   const list = (await shownNotifications(this)).filter((item) => !wanted || item.type === wanted);
   if (list.length) {
-    throw friendly({ message: `Expected no ${wanted ? wanted + ' ' : ''}notification, but the page showed: ${list.map((item) => `[${item.type || 'plain'}] ${item.text}`).join('; ')}.`, hint: 'Notifications shown since the last action of a step of this pack are counted.' });
+    throw friendly({ message: `Expected no ${wanted ? wanted + ' ' : ''}notification, but the page showed: ${endSentence(list.map((item) => `[${item.type || 'plain'}] ${item.text}`).join('; '))}`, hint: 'Notifications shown since the last action of a step of this pack are counted.' });
   }
 });
 
