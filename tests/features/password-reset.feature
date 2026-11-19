@@ -19,13 +19,13 @@ Feature: Password reset through the mail
     Then the "Email" field should hold the email of "member"
     When I fill in "Password" with the password of "member"
     And I fill in "Confirm password" with the password of "member"
-    And I press "Reset password"
+    And I click the "Reset password" button
     Then I should see the status message "Your password has been reset."
     And I should see the login form
     When I open the "Reset Password" link of the email to "member"
     And I fill in "Password" with the password of "member"
     And I fill in "Confirm password" with the password of "member"
-    And I press "Reset password"
+    And I click the "Reset password" button
     Then the "Email" field should have the error "This password reset token is invalid."
     When I log in as "member" with the login form
     Then I should be logged in as "member"
@@ -45,5 +45,5 @@ Feature: Password reset through the mail
     When I open the "Reset Password" link of the email to "unverified"
     And I fill in "Password" with the password of "unverified"
     And I fill in "Confirm password" with the password of "unverified"
-    And I press "Reset password"
+    And I click the "Reset password" button
     Then I should see the status message "Your password has been reset."

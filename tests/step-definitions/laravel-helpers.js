@@ -112,13 +112,20 @@ function requests(world) {
   const page = world.page;
   let state = TRACKED.get(page);
   if (!state) {
-    state = { pending: new Set(), started: 0 };
+    state = { pending: new Set(), started: 0, answers: [] };
     TRACKED.set(page, state);
     const background = (request) => ['xhr', 'fetch'].includes(request.resourceType());
     page.on('request', (request) => {
       if (!background(request)) return;
       state.pending.add(request);
       state.started += 1;
+    });
+    // The answers to the background requests, newest last: a single-page kit shows an error page
+    // that answers one of them in a dialog over the page, not as the page.
+    page.on('response', (response) => {
+      if (!background(response.request())) return;
+      state.answers.push({ url: response.url(), method: response.request().method(), status: response.status(), at: Date.now() });
+      if (state.answers.length > 50) state.answers.shift();
     });
     const done = (request) => { state.pending.delete(request); };
     page.on('requestfinished', done);
@@ -662,6 +669,38 @@ const STATUS_TEXTS = {
 };
 
 /**
+ * The error page a single-page kit shows over the page: the answer of a
+ * background request that was not one of its own pages (a 419, a 429, a 500)
+ * goes into a dialog that holds it in a frame. Returns what that frame shows,
+ * and the status of the newest background answer of that status, or null when
+ * no such dialog is open.
+ *
+ * @returns {Promise<{title: string, heading: string, text: string, status: (number|null)}|null>}
+ */
+async function errorDialog(world) {
+  const page = world.page;
+  const open = await page.locator('dialog[open] iframe, [role="dialog"] iframe').count().catch(() => 0);
+  if (!open) return null;
+  for (const frame of page.frames()) {
+    if (frame === page.mainFrame()) continue;
+    const title = clean(await frame.title().catch(() => ''));
+    const heading = clean(await frame.locator('h1').first().innerText({ timeout: 500 }).catch(() => ''));
+    const text = clean(await frame.locator('body').innerText({ timeout: 500 }).catch(() => ''));
+    if (!text) continue;
+    const code = (heading.match(/\b(\d{3})\b/) || text.match(/^(\d{3})\b/) || [])[1];
+    const answers = requests(world).answers.filter((answer) => String(answer.status) === code);
+    return { title, heading, text, status: answers.length ? answers[answers.length - 1].status : null };
+  }
+  return null;
+}
+
+/** The newest answer to a background request with a status, since a moment in time. */
+function backgroundAnswer(world, status, since = 0) {
+  const answers = requests(world).answers.filter((answer) => answer.status === status && answer.at >= since);
+  return answers.length ? answers[answers.length - 1] : null;
+}
+
+/**
  * The status of the document the browser shows: the one webship-js recorded
  * for the last navigation of the page (`_lastResponse`), else the one the
  * browser keeps in its navigation timing.
@@ -720,4 +759,6 @@ module.exports = {
   mailLink,
   STATUS_TEXTS,
   documentStatus,
+  errorDialog,
+  backgroundAnswer,
 };

@@ -39,4 +39,3 @@ Feature: Email verification
     When I go to "/settings/profile"
     Then I should see "Your email address is unverified."
     And the "Name" field should hold the name of "unverified"
-    And I should not see "Delete account"

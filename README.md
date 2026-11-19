@@ -16,16 +16,17 @@ dashboard and its navigation, the user menu, the settings (profile, password,
 appearance, the account deletion dialog), notifications, the errors under a
 field and the status lines of the auth pages, the error pages (403, 404, 419,
 429, 500, 503), maintenance mode and its bypass, the health route, and the
-check that a live app shows no debug page. The steps are written against an app
-made with the official installer and the Livewire starter kit, on Laravel 13.
+check that a live app shows no debug page. The steps are proven on apps made
+with the official installer and each official starter kit (Livewire, React and
+Vue), on Laravel 13.
 
 No step phrase names the framework or a library: a scenario reads `Given I am a
 logged in user with the "member" user` and `Then I should see the 404 error
 page`.
 
 CI builds a real app with [DDEV](https://ddev.com) on the runner, the way the
-official installer makes it, and runs the whole suite against it, twice, on
-every push and pull request; see
+official installer makes it, once with each starter kit, and runs the whole
+suite against each, twice, on every push and pull request; see
 [`.github/workflows/test.yml`](.github/workflows/test.yml).
 
 ## From nothing to a green run
@@ -191,7 +192,7 @@ Feature: Password reset
 | File | Steps | Covers |
 | --- | --- | --- |
 | `laravel-session.steps.js` | 8 | Login by a handle of the users registry (a session taken over when the account already has one), login through the form, login with an address and a password, repeated attempts until the limit, logout, who is signed in, the login form. |
-| `laravel-account.steps.js` | 8 | The password reset request, the mail the app sends (subject, text, no mail), a link of a mail opened as a person does (or with a changed signature), the email verification notice, the password confirmation. |
+| `laravel-account.steps.js` | 9 | The password reset request, the mail the app sends (subject, text, no mail), a link of a mail opened as a person does (or with a changed signature), the email verification notice, the password confirmation (with an account's password, or one as written). |
 | `laravel-forms.steps.js` | 10 | A field filled with the name, address or password of an account of the registry, a field that holds them, the error under a field (or none), a field the browser refuses as empty, the status line of an auth page, notifications, the button that shows a password. |
 | `laravel-app.steps.js` | 8 | The user menu (open an item, what it offers, the account it names), the navigation (its items, the current page), the appearance (choose one, the chosen one, the one the page is drawn in). |
 | `laravel-errors.steps.js` | 4 | The error page of a status, the debug information a live app must not show, a form sent from another site, the maintenance bypass. |
@@ -214,10 +215,20 @@ accessibility violations`): this pack adds only what the app decides.
   `data-test="logout-button"`, `data-test="confirm-password-button"` and the
   like, `role`, `aria-current`, `data-current`, `data-active`, `aria-checked`.
 - **Three kits, one phrase.** The kits draw the same pages with different
-  markup: the appearance options are a radio group in one kit and a row of
-  buttons in the others, the current page of a navigation is marked in one and
-  only coloured in another, notifications are toasts of two kinds. A step looks
-  for what a person sees and reads the mark each kit leaves.
+  markup, and a step looks for what a person sees and reads the mark each kit
+  leaves: the appearance options are a radio group in one kit and a row of
+  buttons in the others; the current page of a navigation is marked in one and
+  only coloured in another (the step then compares the item's address with the
+  page's); notifications are toasts of two kinds; the button of the password
+  confirmation reads "Confirm" in one kit and "Confirm password" in the others
+  (the step presses the one the kits mark `data-test="confirm-password-button"`);
+  and the single-page kits show an error page that answers a form in a dialog
+  over the page, which the error page step reads.
+- **Buttons by their role.** The auth pages of the single-page kits give their
+  home link the title of the page as hidden text ("Reset password", "Confirm
+  password"), so webship-js's `I press "Reset password"` can take that link: the
+  features press a submit button with `I click the "Reset password" button`,
+  which looks for a button by its role.
 - **No fixed sleeps.** The steps wait on the page's own signals: the requests
   it makes (the single-page kits use XHR, the component kit fetch), the address
   it moves to, the error that appears under a field, the status line.
@@ -309,7 +320,7 @@ One example of each step; the JSDoc block above each definition holds five.
 - `Then I should be logged in as "member"`
 - `Then I should see the login form`
 
-### `laravel-account.steps.js` (8)
+### `laravel-account.steps.js` (9)
 
 - `When I ask for a password reset link for "member"`
 - `Then an email with the subject "Reset your password" should be sent to "member"`
@@ -319,6 +330,7 @@ One example of each step; the JSDoc block above each definition holds five.
 - `Then I should see the email verification notice`
 - `Then I should be asked to confirm my password`
 - `When I confirm my password as "member"`
+- `When I confirm my password with "wrong-password"`
 
 ### `laravel-forms.steps.js` (10)
 
@@ -404,8 +416,8 @@ ACCOUNTS_ONLY=1 SITE_DIR="$PWD/../laravel-app" .github/scripts/build-ddev-site.s
 Every page a step touches was opened in a real browser first, and the step was
 written from what is there: the roles and names of the accessibility tree, the
 stable attributes, what the page does while it loads or saves, the exact
-messages. The steps are proven on Laravel 13 with the Livewire starter kit, in
-US English, with Chromium.
+messages. The steps are proven on Laravel 13 with the Livewire, React and Vue
+starter kits, in US English, with Chromium.
 
 Not covered: completing a registration, verifying an address, deleting an
 account, two-factor authentication, passkeys, the teams variants and the
