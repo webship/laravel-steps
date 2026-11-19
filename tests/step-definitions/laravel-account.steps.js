@@ -226,6 +226,27 @@ Then(/^(I |we )*should( not)* be asked to confirm (?:my|our) password$/, async f
 });
 
 /**
+ * Fill in and send the password confirmation form, and wait for the answer:
+ * the page that asked for it, or the error under the field. The button is the
+ * one the kits mark `data-test="confirm-password-button"` ("Confirm" on one
+ * kit, "Confirm password" on the others).
+ */
+async function sendConfirmation(world, password) {
+  const field = await findField(world, 'Password');
+  await field.fill(password);
+  const button = world.page.locator('[data-test="confirm-password-button"]');
+  const submit = (await button.count()) ? button.first() : world.page.getByRole('button', { name: /^\s*Confirm( password)?\s*$/ });
+  const from = world.page.url();
+  await submit.click();
+  const deadline = Date.now() + budget(world);
+  while (Date.now() < deadline) {
+    if (world.page.url() !== from || (await pageFieldErrors(world)).length) break;
+    await world.page.waitForTimeout(150);
+  }
+  await settle(world);
+}
+
+/**
  * Confirm the password on the password confirmation page with the password
  * of an account of the users registry, as a person does, and wait for the
  * answer: the page that asked for it, or the error under the field.
@@ -237,17 +258,19 @@ Then(/^(I |we )*should( not)* be asked to confirm (?:my|our) password$/, async f
  * Example #5: And we confirm our password as "member"
  */
 When(/^(I |we )*confirm (?:my|our) password as "([^"]*)"$/, async function (pronounCase, handle) {
-  const user = resolveUser(this, handle);
-  const field = await findField(this, 'Password');
-  await field.fill(user.password);
-  const button = this.page.locator('[data-test="confirm-password-button"]');
-  const submit = (await button.count()) ? button.first() : this.page.getByRole('button', { name: 'Confirm', exact: true });
-  const from = this.page.url();
-  await submit.click();
-  const deadline = Date.now() + budget(this);
-  while (Date.now() < deadline) {
-    if (this.page.url() !== from || (await pageFieldErrors(this)).length) break;
-    await this.page.waitForTimeout(150);
-  }
-  await settle(this);
+  await sendConfirmation(this, resolveUser(this, handle).password);
+});
+
+/**
+ * Send the password confirmation form with a password as it is written: a
+ * wrong one, to see the form refuse it. Assert the outcome with the next step.
+ *
+ * Example #1: When I confirm my password with "wrong-password"
+ * Example #2: When we confirm our password with "not-my-password"
+ * Example #3: And I confirm my password with "wrong-password"
+ * Example #4: When I confirm my password with "12345678"
+ * Example #5: And we confirm our password with "wrong-password"
+ */
+When(/^(I |we )*confirm (?:my|our) password with "([^"]*)"$/, async function (pronounCase, password) {
+  await sendConfirmation(this, password);
 });

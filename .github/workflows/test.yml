@@ -22,13 +22,20 @@ concurrency:
 
 jobs:
   cucumber:
-    name: laravel-steps test suite
+    # The same suite on an app made with each official starter kit: they give an app the same
+    # pages, drawn with other markup.
+    name: laravel-steps test suite (${{ matrix.starter-kit }} starter kit)
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        starter-kit: [livewire, react, vue]
     env:
       HEADLESS: 'true'
       FORCE_COLOR: '1'
       SITE_DIR: ${{ github.workspace }}/../laravel-app
+      STARTER_KIT: ${{ matrix.starter-kit }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -101,7 +108,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cucumber-report
+          name: cucumber-report-${{ matrix.starter-kit }}
           path: tests/reports/
           retention-days: 14
           if-no-files-found: ignore
@@ -110,7 +117,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: failure-screenshots
+          name: failure-screenshots-${{ matrix.starter-kit }}
           path: |
             screenshots/
             videos/

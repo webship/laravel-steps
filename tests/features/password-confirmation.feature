@@ -11,8 +11,7 @@ Feature: Password confirmation
     When I log in as "member" with the login form
     And I go to "/settings/security"
     Then I should be asked to confirm my password
-    When I fill in "Password" with "wrong-password"
-    And I press "Confirm"
+    When I confirm my password with "wrong-password"
     Then the "Password" field should have the error "The provided password was incorrect."
     And I should be asked to confirm my password
     When I confirm my password as "member"

@@ -23,6 +23,7 @@ const {
   open,
   STATUS_TEXTS,
   documentStatus,
+  errorDialog,
 } = require('./laravel-helpers');
 
 /** What the page on screen says about itself: its status, title, main heading and text. */
@@ -39,7 +40,9 @@ async function pageSummary(world) {
  * with that status, and it shows the code (and, for the statuses the framework
  * names, the status text: "Not Found", "Page Expired", "Server Error",
  * "Service Unavailable"). An app with error pages of its own passes as long as
- * they print the code.
+ * they print the code. On the single-page kits a form that gets an error page
+ * for an answer shows it in a dialog over the page: the step reads that dialog
+ * and the status of the answer it holds.
  *
  * Example #1: Then I should see the 404 error page
  * Example #2: Then I should see the 403 error page
@@ -52,9 +55,10 @@ Then(/^(I |we )*should( not)* see the (\d{3}) error page$/, async function (pron
   const name = STATUS_TEXTS[wanted];
   const deadline = Date.now() + budget(this);
   let summary;
+  const showsIn = (s) => !!s && s.status === wanted && (s.heading.includes(code) || s.text.includes(code)) && (!name || s.text.includes(name) || s.title.includes(name));
   for (;;) {
     summary = await pageSummary(this);
-    const shows = summary.status === wanted && (summary.heading.includes(code) || summary.text.includes(code)) && (!name || summary.text.includes(name) || summary.title.includes(name));
+    const shows = showsIn(summary) || showsIn(await errorDialog(this));
     if (notCase ? !shows : shows) return;
     if (notCase || Date.now() > deadline) break;
     await this.page.waitForTimeout(200);

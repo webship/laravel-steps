@@ -167,7 +167,7 @@ Then(/^the navigation should( not)* show "([^"]*)" as the current page$/, async 
  * Example #4: When we choose the "Dark" appearance
  * Example #5: And I choose the "System" appearance
  */
-When(/^(I |we )*choose the "(Light|Dark|System)" appearance$/i, async function (pronounCase, wanted) {
+When(/^(I |we )*choose the "(Light|Dark|System)" appearance$/, async function (pronounCase, wanted) {
   const page = this.page;
   const name = new RegExp('^\\s*' + wanted + '\\s*$', 'i');
   const candidates = [
@@ -197,7 +197,8 @@ async function chosenAppearance(world) {
     if (marked) return { value: marked.textContent.replace(/\s+/g, ' ').trim(), from: 'the option the page marks as chosen' };
     let stored = null;
     try { stored = localStorage.getItem('appearance') || localStorage.getItem('flux.appearance'); } catch (e) { /* storage blocked */ }
-    return { value: stored || 'system', from: stored ? 'the preference stored in the browser' : 'no stored preference (the system\'s)' };
+    const value = (stored || 'system').replace(/^./, (c) => c.toUpperCase());
+    return { value, from: stored ? 'the preference stored in the browser' : 'no stored preference (the system\'s)' };
   }).catch(() => ({ value: '', from: 'nothing (the page could not be read)' }));
 }
 
@@ -212,10 +213,10 @@ async function chosenAppearance(world) {
  * Example #4: Then the chosen appearance should be "System"
  * Example #5: And the chosen appearance should be "Dark"
  */
-Then(/^the chosen appearance should be "(Light|Dark|System)"$/i, async function (wanted) {
+Then(/^the chosen appearance should be "(Light|Dark|System)"$/, async function (wanted) {
   await eventually(this, () => chosenAppearance(this), (chosen) => chosen.value.toLowerCase() === wanted.toLowerCase(), (chosen) => ({
     message: `Expected the chosen appearance "${wanted}", but it is "${chosen.value}" (read from ${chosen.from}).`,
-    hint: 'Choose it on the appearance settings page (I click "Dark").',
+    hint: 'Choose it on the appearance settings page (I choose the "Dark" appearance).',
   }));
 });
 

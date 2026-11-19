@@ -34,6 +34,7 @@ const {
   openUserMenu,
   closeMenus,
   documentStatus,
+  backgroundAnswer,
 } = require('./laravel-helpers');
 
 const LOGIN_HINT = 'The login form is at /login (worldParameters.loginPath): the fields "Email address" and "Password" and the "Log in" button (data-test="login-button"). Check launchUrl in cucumber.js.';
@@ -71,9 +72,15 @@ async function openLoginForm(world) {
   }
 }
 
-/** The 429 page the login route answers once the limit of attempts is reached. */
-async function throttled(world) {
-  return (await documentStatus(world)) === 429 || /^\s*Too Many Requests\s*$/i.test(await world.page.title().catch(() => ''));
+/**
+ * The 429 page the login route answers once the limit of attempts is reached:
+ * as the page (a form sent the classic way), or as the answer to the request a
+ * single-page kit sent, which it shows in a dialog over the login form.
+ */
+async function throttled(world, since) {
+  return (await documentStatus(world)) === 429
+    || /^\s*Too Many Requests\s*$/i.test(await world.page.title().catch(() => ''))
+    || !!backgroundAnswer(world, 429, since);
 }
 
 /**
@@ -97,10 +104,11 @@ async function submitLogin(world, email, password, { remember = false } = {}) {
   }
   const button = world.page.locator('[data-test="login-button"]');
   const submit = (await button.count()) ? button.first() : loginForm(world).locator('button[type="submit"]').first();
+  const sentAt = Date.now();
   await submit.click();
   const deadline = Date.now() + 30000;
   for (;;) {
-    if (await throttled(world)) return { error: 'Too Many Requests (HTTP 429)', throttled: true };
+    if (await throttled(world, sentAt)) return { error: 'Too Many Requests (HTTP 429)', throttled: true };
     if (!isOnPath(world, loginPath(world))) break;
     const errors = await pageFieldErrors(world);
     if (errors.length) return { error: errors.join(' '), throttled: false };
