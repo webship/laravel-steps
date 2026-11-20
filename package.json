@@ -1,6 +1,6 @@
 {
   "name": "@webship-js/laravel-steps",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Cucumber step definitions for apps made from the official starter kits, a plugin for webship-js (Playwright and Cucumber): the session and its limits, registration refusals, the password reset through the mail, email verification, password confirmation, the settings pages, notifications, field errors, the error pages, maintenance mode and the debug page check.",
   "main": "tests/step-definitions/laravel-session.steps.js",
   "files": [
