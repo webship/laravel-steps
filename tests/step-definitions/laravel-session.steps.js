@@ -386,7 +386,9 @@ Then(/^(I |we )*should be logged in as "([^"]*)"$/, async function (pronounCase,
     : !!user.name && clean(address).toLowerCase().includes(clean(user.name).toLowerCase());
   if (!named) {
     throw friendly({
-      message: `Expected "${handle}" (${user.email}${user.name ? `, ${user.name}` : ''}) to be logged in, but the app names ${byAddress ? address : `"${address}"`}.`,
+      message: byAddress
+        ? `Expected "${handle}" (${user.email}) to be logged in, but the app names ${address}.`
+        : `Expected "${handle}" (${user.email}${user.name ? `, ${user.name}` : ''}) to be logged in, but the app names "${address}".`,
       hint: byAddress || user.name
         ? 'The user menu shows the name and the address of the signed-in account.'
         : `The user menu shows no address: give "${handle}" its name in worldParameters.users (name: '...').`,
