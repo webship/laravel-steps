@@ -219,7 +219,7 @@ Feature: Password reset
 | `laravel-forms.steps.js` | 10 | A field filled with the name, address or password of an account of the registry, a field that holds them, the error under a field (or none), a field the browser refuses as empty, the status line of an auth page, notifications, the button that shows a password. |
 | `laravel-app.steps.js` | 8 | The user menu (open an item, what it offers, the account it names), the navigation (its items, the current page), the appearance (choose one, the chosen one, the one the page is drawn in). |
 | `laravel-errors.steps.js` | 4 | The error page of a status, the debug information a live app must not show, a form sent from another site, the maintenance bypass. |
-| `laravel-helpers.js` | | Shared plumbing for the files above and for your own steps: the wait budget, the requests of the page, friendly errors, the users registry and the session cache, fields and their errors, status lines, notifications, the user menu, the navigation, the mailbox, the status of the page. It registers no step. |
+| `laravel-helpers.js` | | Shared plumbing for the files above and for your own steps: the wait budget, the requests of the page, friendly errors, the users registry and the session cache, fields and their errors, status lines, notifications, the user menu, the navigation, the mailbox, the status of the page, and `FRAME`, the markup of the frame a pack that builds on this one adds to. It registers no step. |
 
 Text, links, the plain filling of fields, buttons, dialogs, cookies, the status
 code of a page and the accessibility audit are webship-js's own steps (`I
@@ -252,6 +252,19 @@ accessibility violations`): this pack adds only what the app decides.
   password"), so webship-js's `I press "Reset password"` can take that link: the
   features press a submit button with `I click the "Reset password" button`,
   which looks for a button by its role.
+- **A panel drawn on the app.** An admin panel built on a Laravel app draws
+  its forms otherwise: fields with no name attribute, labels that carry a
+  required mark ("Email address*"), an error a field names with
+  `aria-invalid` and `aria-describedby`, a notification instead of the 429
+  page when it refuses further logins ("Please try again in 42 seconds."). The
+  steps read those the same way: the login form is the form that holds a
+  password field, a field is found by the label it starts with, a refusal that
+  names its seconds is waited out once. The parts of the frame the steps find
+  by their markup (the button of the user menu, the item that logs out, the
+  notifications) are listed in `FRAME` in `laravel-helpers.js`: a pack that
+  builds on this one adds its own there when it loads, as
+  [`@webship-js/filament-steps`](https://github.com/webship/filament-steps)
+  does for an admin panel's.
 - **No fixed sleeps.** The steps wait on the page's own signals: the requests
   it makes (the single-page kits use XHR, the component kit fetch), the address
   it moves to, the error that appears under a field, the status line.

@@ -14,8 +14,10 @@
 const { Given, When, Then } = require('@cucumber/cucumber');
 const { friendly } = require('webship-js/tests/step-definitions/webship');
 const {
+  FRAME,
   budget,
   clean,
+  escapeRegExp,
   siteUrl,
   homePath,
   loginPath,
@@ -39,25 +41,45 @@ const {
 
 const LOGIN_HINT = 'The login form is at /login (worldParameters.loginPath): the fields "Email address" and "Password" and the "Log in" button (data-test="login-button"). Check launchUrl in cucumber.js.';
 
-/** The login form: the form that holds the password field of the login page. */
+/**
+ * The login form: the form that holds the password field of the login page.
+ * The kits name their fields (email, password); a form whose fields have no
+ * name (an admin panel drawn on the app) is the form that holds a password
+ * field.
+ */
 function loginForm(world) {
-  return world.page.locator('form:has(input[type="password"][name="password"]), form:has(input[name="email"]):has(input[type="password"])').first();
+  return world.page.locator('form:has(input[type="password"][name="password"]), form:has(input[name="email"]):has(input[type="password"]), form:has(input[type="password"])').first();
 }
 
-/** The address field of the login form ("Email address"), by its label first. */
+/**
+ * The address field of the login form ("Email address"), by its label first;
+ * then by its name; then by a label that starts with "Email" and carries a
+ * required mark ("Email address*"); then the form's e-mail field.
+ */
 async function emailField(world) {
   for (const label of ['Email address', 'Email']) {
     const byLabel = world.page.getByLabel(label, { exact: true });
     if (await byLabel.count()) return byLabel.first();
   }
-  return world.page.locator('form input[name="email"]').first();
+  const byName = world.page.locator('form input[name="email"]');
+  if (await byName.count()) return byName.first();
+  const marked = world.page.getByLabel(/^\s*Email/i);
+  if (await marked.count()) return marked.first();
+  return loginForm(world).locator('input[type="email"]').first();
 }
 
-/** The password field of the login form. */
+/** The password field of the login form: by its label, its name, else the form's password field. */
 async function passwordField(world) {
   const byLabel = world.page.getByLabel('Password', { exact: true });
   if (await byLabel.count()) return byLabel.first();
-  return world.page.locator('form input[name="password"]').first();
+  const byName = world.page.locator('form input[name="password"]');
+  if (await byName.count()) return byName.first();
+  return loginForm(world).locator('input[type="password"]').first();
+}
+
+/** The texts of the item that logs out, as a pattern: "Log out", and what a pack that builds on this one added. */
+function logoutPattern() {
+  return new RegExp(FRAME.logoutLabels.map(escapeRegExp).join('|'), 'i');
 }
 
 /** Open the login page as a visitor: the browser forgets the session it had. */
@@ -111,7 +133,12 @@ async function submitLogin(world, email, password, { remember = false } = {}) {
     if (await throttled(world, sentAt)) return { error: 'Too Many Requests (HTTP 429)', throttled: true };
     if (!isOnPath(world, loginPath(world))) break;
     const errors = await pageFieldErrors(world);
-    if (errors.length) return { error: errors.join(' '), throttled: false };
+    if (errors.length) {
+      // A form that refuses further attempts with a message instead of the 429 page ("Too many login
+      // attempts. Please try again in 42 seconds.") says how long to wait.
+      const wait = errors.join(' ').match(/too many[\s\S]*?try again in (\d+) seconds?/i);
+      return { error: errors.join(' '), throttled: !!wait, retryAfter: wait ? Number(wait[1]) : null };
+    }
     if (Date.now() > deadline) {
       throw friendly({ message: `Logging in as "${email}" led neither to a page of the app nor to an error (${world.page.url()}).`, hint: LOGIN_HINT });
     }
@@ -123,14 +150,14 @@ async function submitLogin(world, email, password, { remember = false } = {}) {
 
 /**
  * Log in through the form; when the app answers that there were too many
- * attempts, wait the time its Retry-After header gives (a minute at most) and
- * try once more.
+ * attempts, wait the time it gives (its Retry-After header, or the seconds its
+ * message names; a minute at most) and try once more.
  */
 async function loginThroughTheForm(world, user, options) {
   let outcome = await submitLogin(world, user.email, user.password, options);
   if (outcome.throttled) {
-    const retry = Math.min(Number((world._lastResponse && world._lastResponse.headers && world._lastResponse.headers['retry-after']) || 60), 65);
-    process.stderr.write(`\n[laravel-steps] the login of ${user.email} was refused for too many attempts: waiting ${retry} s, as the app asks (Retry-After).\n`);
+    const retry = Math.min(Number(outcome.retryAfter || (world._lastResponse && world._lastResponse.headers && world._lastResponse.headers['retry-after']) || 60), 65);
+    process.stderr.write(`\n[laravel-steps] the login of ${user.email} was refused for too many attempts: waiting ${retry} s, as the app asks${outcome.retryAfter ? '' : ' (Retry-After)'}.\n`);
     await world.page.waitForTimeout((retry + 1) * 1000);
     outcome = await submitLogin(world, user.email, user.password, options);
   }
@@ -235,7 +262,11 @@ When(/^(I |we )*log in as "([^"]*)" with the login form( and "Remember me" check
 /**
  * Submit the login form with an address and a password. The step does not
  * expect the login to succeed: assert the outcome with the next step (an
- * error under the "Email address" field, the dashboard).
+ * error under the "Email address" field, the dashboard). An app that counts
+ * every login attempt from one browser (an admin panel drawn on the app does)
+ * may refuse it for too many attempts first: the step then waits the time the
+ * app gives and sends the form once more, so the next step reads the answer
+ * to the address and the password.
  *
  * Example #1: When I log in with the email "member@example.com" and the password "wrong-password"
  * Example #2: When we log in with the email "nobody@example.com" and the password "Whatever-123!"
@@ -243,9 +274,9 @@ When(/^(I |we )*log in as "([^"]*)" with the login form( and "Remember me" check
  * Example #4: And I log in with the email "member@example.com" and the password "wrong-password"
  * Example #5: When we log in with the email "no-such-account@example.org" and the password "Nothing-at-all-1!"
  */
-When(/^(I |we )*log in with the email "([^"]*)" and the password "([^"]*)"$/, async function (pronounCase, email, password) {
+When(/^(I |we )*log in with the email "([^"]*)" and the password "([^"]*)"$/, { timeout: 120000 }, async function (pronounCase, email, password) {
   await recordNotifications(this);
-  await submitLogin(this, email, password);
+  await loginThroughTheForm(this, { email, password });
 });
 
 /**
@@ -286,10 +317,11 @@ When(/^(I |we )*log out$/, async function (pronounCase) {
   let item;
   if (trigger) {
     const menu = await openUserMenu(this);
-    item = menu.getByRole('menuitem', { name: 'Log out' });
+    item = menu.getByRole('menuitem', { name: logoutPattern() });
     if (!(await item.count())) item = menu.locator('[data-test="logout-button"]');
   } else {
-    item = page.locator('[data-test="logout-button"]:visible, button:visible:has-text("Log out"), a:visible:has-text("Log out")');
+    item = page.locator('[data-test="logout-button"]:visible')
+      .or(page.locator('button:visible, a:visible').filter({ hasText: logoutPattern() }));
   }
   if (!(await item.count())) {
     throw friendly({ message: `There is nothing to log out with on this page (${page.url()}): no user menu and no "Log out" button.`, hint: 'Log in first, and open a page of the app (the dashboard, the settings).' });
@@ -347,8 +379,20 @@ Then(/^(I |we )*should be logged in as "([^"]*)"$/, async function (pronounCase,
   if (!address) {
     throw friendly({ message: `Expected "${handle}" (${user.email}) to be logged in, but nobody is (${this.page.url()}).`, hint: 'Log in first (I am a logged in user with the "..." user).' });
   }
-  if (address.toLowerCase() !== user.email.toLowerCase()) {
-    throw friendly({ message: `Expected "${handle}" (${user.email}) to be logged in, but the app names ${address}.`, hint: 'The user menu shows the name and the address of the signed-in account.' });
+  // A user menu that shows no address (an admin panel's shows the name) names the account by its name.
+  const byAddress = /@/.test(address);
+  const named = byAddress
+    ? address.toLowerCase() === user.email.toLowerCase()
+    : !!user.name && clean(address).toLowerCase().includes(clean(user.name).toLowerCase());
+  if (!named) {
+    throw friendly({
+      message: byAddress
+        ? `Expected "${handle}" (${user.email}) to be logged in, but the app names ${address}.`
+        : `Expected "${handle}" (${user.email}${user.name ? `, ${user.name}` : ''}) to be logged in, but the app names "${address}".`,
+      hint: byAddress || user.name
+        ? 'The user menu shows the name and the address of the signed-in account.'
+        : `The user menu shows no address: give "${handle}" its name in worldParameters.users (name: '...').`,
+    });
   }
 });
 
@@ -364,7 +408,7 @@ Then(/^(I |we )*should be logged in as "([^"]*)"$/, async function (pronounCase,
  * Example #5: But I should see the login form
  */
 Then(/^(I |we )*should( not)* see the login form$/, async function (pronounCase, notCase) {
-  await assertPresence(this.page.locator('form:has([data-test="login-button"]), form:has(input[name="email"]):has(input[type="password"]):has(button[type="submit"])'), notCase, {
+  await assertPresence(this.page.locator('form:has([data-test="login-button"]), form:has(input[name="email"]):has(input[type="password"]):has(button[type="submit"]), form:has(input[type="password"]):has(button[type="submit"])'), notCase, {
     label: 'the login form',
     hint: LOGIN_HINT,
     timeout: budget(this),
