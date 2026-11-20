@@ -76,7 +76,9 @@ Then(/^the user menu should( not)* offer "([^"]*)"$/, async function (notCase, i
 
 /**
  * Assert that the user menu names an account of the users registry: its name
- * (when the registry gives one) and its address.
+ * (when the registry gives one) and its address. A menu that shows no address
+ * (an admin panel drawn on the app shows the name only) names the account by
+ * its name.
  *
  * Example #1: Then the user menu should name "member"
  * Example #2: And the user menu should name "member"
@@ -91,7 +93,9 @@ Then(/^the user menu should name "([^"]*)"$/, async function (handle) {
   const menu = await openUserMenu(this);
   const text = clean(await menu.innerText().catch(() => ''));
   await closeMenus(this);
-  const missing = [user.name, user.email].filter((part) => part && !text.includes(part));
+  // A user menu that shows no address at all (an admin panel's shows the name only) names the account by its name.
+  const parts = /[^\s@]+@[^\s@]+\.[^\s@]+/.test(text) || !user.name ? [user.name, user.email] : [user.name];
+  const missing = parts.filter((part) => part && !text.includes(part));
   if (missing.length) {
     throw friendly({ message: `Expected the user menu to name "${handle}" (${[user.name, user.email].filter(Boolean).join(', ')}), but it reads: "${text}".`, hint: 'The user menu shows the name and the address the app stored for the signed-in account.' });
   }

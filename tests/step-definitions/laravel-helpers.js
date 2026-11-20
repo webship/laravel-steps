@@ -20,6 +20,47 @@
 
 const { gotoUrl, friendly, fillField } = require('webship-js/tests/step-definitions/webship');
 
+// ---------------------------------------------------------------------------
+// The frame of the app: what a pack that builds on this one adds to
+// ---------------------------------------------------------------------------
+
+/**
+ * The parts of the app's frame that the steps find by their markup: the
+ * button that opens the user menu, the texts of the item that logs out, and
+ * the notifications. The values here are the official starter kits'. A pack
+ * that builds on this one (an admin panel drawn on the app, with markup of its
+ * own) adds its own when it loads, before any step runs; the steps of this
+ * pack then find its frame too:
+ *
+ *   const { FRAME } = require('@webship-js/laravel-steps/tests/step-definitions/laravel-helpers');
+ *   FRAME.userMenuTriggers.push('.my-user-menu-button');
+ *   FRAME.logoutLabels.push('Sign out');
+ *   FRAME.notifications.push({ selector: '.my-toast', typeClassPrefix: 'my-toast-' });
+ *
+ * A notification's kind (success, error or danger, warning, info) is read
+ * from an attribute (`typeAttribute`) or from a class that starts with a
+ * prefix (`typeClassPrefix`).
+ */
+const FRAME = {
+  // The button that opens the user menu: the first visible match, in this order.
+  userMenuTriggers: [
+    '[data-test="sidebar-menu-button"]',
+    'header button[aria-haspopup="menu"], [data-flux-header] button[aria-haspopup="menu"], [data-flux-profile]',
+  ],
+  // The text of the item of the user menu (or of the button of a page without the menu) that logs out.
+  logoutLabels: ['Log out'],
+  // The notifications a save shows for a few seconds.
+  notifications: [
+    { selector: '[data-flux-toast-dialog]', typeAttribute: 'data-variant' },
+    { selector: '[data-sonner-toast]', typeAttribute: 'data-type' },
+  ],
+};
+
+/** The kinds of notification of FRAME, as the browser-side code reads them. */
+function notificationKinds() {
+  return FRAME.notifications.map((kind) => ({ selector: kind.selector, attribute: kind.typeAttribute || '', prefix: kind.typeClassPrefix || '' }));
+}
+
 /**
  * The per-assertion wait budget: `minWaitTime.page` from cucumber.js, at least
  * 10 seconds. Kept below webship-js's 45 second step timeout.
@@ -387,7 +428,15 @@ async function fieldErrors(field) {
 async function pageFieldErrors(world) {
   return world.page.evaluate(() => {
     const out = [];
-    const nodes = document.querySelectorAll('[role="alert"], [data-flux-error], p[class*="text-red"], div[class*="text-red"]');
+    const nodes = [...document.querySelectorAll('[role="alert"], [data-flux-error], p[class*="text-red"], div[class*="text-red"]')];
+    // The message a field names once the app marked it invalid (aria-invalid, then aria-errormessage or
+    // aria-describedby): how a form whose errors carry no role or colour of the kits says which field failed.
+    for (const field of document.querySelectorAll('[aria-invalid="true"]')) {
+      for (const id of `${field.getAttribute('aria-errormessage') || ''} ${field.getAttribute('aria-describedby') || ''}`.split(/\s+/).filter(Boolean)) {
+        const node = document.getElementById(id);
+        if (node) nodes.push(node);
+      }
+    }
     for (const n of nodes) {
       const box = n.getBoundingClientRect();
       const t = (n.textContent || '').replace(/\s+/g, ' ').trim();
@@ -397,9 +446,20 @@ async function pageFieldErrors(world) {
   }).catch(() => []);
 }
 
-/** Fill a field the way webship-js's "I fill in" does: by its exact label, placeholder or name. */
+/**
+ * Fill a field the way webship-js's "I fill in" does: by its exact label,
+ * placeholder or name. A field that none of them matches is looked for the
+ * way a person reads it (findField): a label that carries a required mark
+ * ("Password*"), on a form whose fields have no name attribute.
+ */
 async function fillLikeABuiltIn(world, name, value) {
-  await fillField(world.page, name, value, world);
+  try {
+    await fillField(world.page, name, value, world);
+  } catch (err) {
+    const field = await findField(world, name, { timeout: 1000 }).catch(() => null);
+    if (!field) throw err;
+    await field.fill(value === undefined || value === null ? '' : String(value));
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -412,53 +472,67 @@ async function fillLikeABuiltIn(world, name, value) {
  * The three kits print them as a line of green text, with no role.
  */
 async function statusLines(world) {
-  return world.page.evaluate(() => {
+  return world.page.evaluate((kinds) => {
     const out = [];
+    const toasts = ['ui-toast-group', '[data-sonner-toaster]', ...kinds.map((kind) => kind.selector)].join(', ');
     for (const n of document.querySelectorAll('[role="status"]:not(:empty), [class*="text-green"]')) {
-      if (n.closest('[data-flux-toast-dialog], [data-sonner-toast], ui-toast-group, [data-sonner-toaster]')) continue;
+      // A notification, or the region that holds the notifications, is not a status line.
+      if (n.closest(toasts) || n.querySelector(kinds.map((kind) => kind.selector).join(', '))) continue;
       const box = n.getBoundingClientRect();
       const t = (n.textContent || '').replace(/\s+/g, ' ').trim();
       if (t && (box.width || box.height)) out.push(t);
     }
     return [...new Set(out)];
-  }).catch(() => []);
+  }, notificationKinds()).catch(() => []);
 }
 
 // The kits show the outcome of a background save as a notification that
 // fades after a few seconds: the component kit as `[data-flux-toast-dialog]`
 // (`data-variant`), the single-page kits as `[data-sonner-toast]`
-// (`data-type`). A recorder keeps the ones shown since the last action, so an
-// assertion a moment after the notification faded still reads it.
-const RECORDER = `(() => {
+// (`data-type`); a pack that builds on this one adds its own (FRAME). A
+// recorder keeps the ones shown since the last action, so an assertion a
+// moment after the notification faded still reads it.
+function recorderScript() {
+  return `(() => {
   if (window.__webshipToastRecorder) return;
   window.__webshipToastRecorder = true;
   const KEY = '__webshipToasts';
+  const KINDS = ${JSON.stringify(notificationKinds())};
+  const typeOf = (node, kind) => {
+    if (kind.attribute) return (node.getAttribute(kind.attribute) || '').toLowerCase();
+    if (kind.prefix) {
+      const found = [...node.classList].find((name) => name.startsWith(kind.prefix));
+      return found ? found.slice(kind.prefix.length).toLowerCase() : '';
+    }
+    return '';
+  };
   const read = () => { try { return JSON.parse(sessionStorage.getItem(KEY) || '[]'); } catch (e) { return []; } };
-  const record = (node) => {
+  const record = (node, kind) => {
     if (!node || node.nodeType !== 1 || node.__webshipRecorded) return;
     const text = (node.textContent || '').replace(/\\s+/g, ' ').trim();
     if (!text) return;
     node.__webshipRecorded = true;
-    const type = (node.getAttribute('data-variant') || node.getAttribute('data-type') || '').toLowerCase();
     const list = read();
-    list.push({ type, text, at: Date.now() });
+    list.push({ type: typeOf(node, kind), text, at: Date.now() });
     try { sessionStorage.setItem(KEY, JSON.stringify(list.slice(-30))); } catch (e) { /* storage is full or blocked */ }
   };
-  const scan = () => document.querySelectorAll('[data-flux-toast-dialog], [data-sonner-toast]').forEach(record);
+  const scan = () => KINDS.forEach((kind) => document.querySelectorAll(kind.selector).forEach((node) => record(node, kind)));
   const start = () => {
     scan();
     new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
   };
   if (document.documentElement) start(); else document.addEventListener('DOMContentLoaded', start);
 })();`;
+}
 
 /** Start recording the notifications of this browser context (once). */
 async function recordNotifications(world) {
+  const script = recorderScript();
   if (!world.__toastsRecorded) {
     world.__toastsRecorded = true;
-    await world.page.context().addInitScript(RECORDER);
+    await world.page.context().addInitScript(script);
   }
-  await world.page.evaluate(RECORDER).catch(() => {});
+  await world.page.evaluate(script).catch(() => {});
 }
 
 /** Forget the notifications shown so far: the next assertion is about what the next action shows. */
@@ -470,15 +544,26 @@ const TOAST_TYPES = { success: 'success', danger: 'error', error: 'error', warni
 
 /** The notifications on the page now and the ones recorded since the last action, as `{type, text}`. */
 async function shownNotifications(world) {
-  const list = await world.page.evaluate(() => {
-    const now = [...document.querySelectorAll('[data-flux-toast-dialog], [data-sonner-toast]')].map((node) => ({
-      type: (node.getAttribute('data-variant') || node.getAttribute('data-type') || '').toLowerCase(),
-      text: (node.textContent || '').replace(/\s+/g, ' ').trim(),
-    })).filter((item) => item.text);
+  const list = await world.page.evaluate((kinds) => {
+    const typeOf = (node, kind) => {
+      if (kind.attribute) return (node.getAttribute(kind.attribute) || '').toLowerCase();
+      if (kind.prefix) {
+        const found = [...node.classList].find((name) => name.startsWith(kind.prefix));
+        return found ? found.slice(kind.prefix.length).toLowerCase() : '';
+      }
+      return '';
+    };
+    const now = [];
+    for (const kind of kinds) {
+      for (const node of document.querySelectorAll(kind.selector)) {
+        const text = (node.textContent || '').replace(/\s+/g, ' ').trim();
+        if (text) now.push({ type: typeOf(node, kind), text });
+      }
+    }
     let recorded = [];
     try { recorded = JSON.parse(sessionStorage.getItem('__webshipToasts') || '[]'); } catch (e) { /* ignore */ }
     return [...recorded, ...now];
-  }).catch(() => []);
+  }, notificationKinds()).catch(() => []);
   const seen = new Set();
   return list.map((item) => ({ type: Object.prototype.hasOwnProperty.call(TOAST_TYPES, item.type) ? TOAST_TYPES[item.type] : item.type, text: item.text }))
     .filter((item) => {
@@ -496,14 +581,12 @@ async function shownNotifications(world) {
 /**
  * The button that opens the user menu: the one the three kits mark
  * `data-test="sidebar-menu-button"`, else a visible menu button of the
- * header (the narrow layouts).
+ * header (the narrow layouts), else one a pack that builds on this one added
+ * to FRAME.userMenuTriggers.
  */
 async function userMenuTrigger(world) {
   const page = world.page;
-  const candidates = [
-    page.locator('[data-test="sidebar-menu-button"]'),
-    page.locator('header button[aria-haspopup="menu"], [data-flux-header] button[aria-haspopup="menu"], [data-flux-profile]'),
-  ];
+  const candidates = FRAME.userMenuTriggers.map((selector) => page.locator(selector));
   for (const locator of candidates) {
     const count = await locator.count().catch(() => 0);
     for (let i = 0; i < count; i += 1) {
@@ -716,6 +799,7 @@ async function documentStatus(world) {
 }
 
 module.exports = {
+  FRAME,
   budget,
   settleBudget,
   escapeRegExp,
