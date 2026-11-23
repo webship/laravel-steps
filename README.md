@@ -31,7 +31,7 @@ suite against each, twice, on every push and pull request; see
 
 ## From nothing to a green run
 
-What the machine needs: Docker, [DDEV](https://ddev.com), git, python3, and Node.js 20 or later with npm. PHP, Composer, the database and the app's own Node.js run in DDEV's containers.
+What the machine needs: Docker, [DDEV](https://ddev.com), git, python3, and Node.js 24 or later with npm. PHP, Composer, the database and the app's own Node.js run in DDEV's containers.
 
 **1. The app.** The pack's own build script (the one CI runs) makes a new app in a DDEV project the way the DDEV quickstart does with the official installer: `laravel new` with the Livewire starter kit, its database migrated, its assets built. It then adds one page (an error nothing catches, for the 500 page), creates the accounts of [Test users](#test-users), and runs the app as a live app runs (`APP_ENV=production`, `APP_DEBUG=false`). It takes two to five minutes.
 
@@ -154,7 +154,7 @@ Not tested: completing a registration (the suite never creates an account), veri
 
 ## Requirements
 
-- Node.js 20 or later
+- Node.js 24 or later
 - A webship-js 2.0 test project (webship-js 2.0.16 or later)
 - An app made from an official starter kit (Livewire, React or Vue), and accounts on it for the suite
 
